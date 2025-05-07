@@ -1,0 +1,10 @@
+.DS_Store
+dist/
+build/
+*.png
+*.jpg
+*.icns
+*.json
+*.html
+*.spec
+*.csv
