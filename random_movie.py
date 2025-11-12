@@ -1,6 +1,7 @@
+from datetime import datetime
 import io
-import keyring
 import os, json
+import math
 import requests
 import webbrowser
 import pandas as pd
@@ -8,14 +9,11 @@ import tkinter as tk
 from bs4 import BeautifulSoup
 from PIL import Image, ImageTk
 from tkinter import messagebox
+from concurrent.futures import ThreadPoolExecutor
 
-LOGIN_URL = "https://letterboxd.com/sign-in/"
-LOGIN_FORM = "https://letterboxd.com/user/login.do"
-EXPORT_URL_TEMPLATE = "https://letterboxd.com/{}/watchlist/export/"
-
-df = None
-if os.path.exists("watchlist.csv"):
-    df = pd.read_csv("watchlist.csv")
+WATCHLIST_URL = "https://letterboxd.com/{}/watchlist/page/{}/"
+DEBUG = True
+watchlists = {} # Maps username to their watchlist DataFrame
 
 headers = {
     "User-Agent": "Mozilla/5.0",
@@ -24,45 +22,186 @@ headers = {
     "Connection": "keep-alive"
 }
 
-def fetch_random_movie(username, password, num_samples=1, export_csv=False):
-    global df
-    if df is None:
-        session = requests.Session()
+def fetch_page_movies(username, page, session):
+    """Fetch and parse movies from a single page"""
+    try:
+        resolved_url = WATCHLIST_URL.format(username, page)
+        if DEBUG:
+            print(f"Fetching page {page}: {resolved_url}")
+        
+        response = session.get(resolved_url, headers=headers)
+        if response.status_code != 200:
+            return []
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        movies = soup.find_all("li", attrs={"class": "griditem"})
+        
+        if not movies:  # No more movies found
+            return []
+        
+        page_movies = []
+        # Extract movie information from each griditem
+        for movie in movies:
+            try:
+                react_component = movie.find("div", class_="react-component")
+                if react_component:
+                    # Extract title and year from data-item-full-display-name
+                    full_name = react_component.get("data-item-full-display-name", "")
+                    
+                    # Parse title and year (format: "Title (Year)")
+                    if "(" in full_name and full_name.endswith(")"):
+                        title = full_name.rsplit(" (", 1)[0]
+                        year = full_name.rsplit(" (", 1)[1][:-1]  # Remove the closing )
+                    else:
+                        title = full_name
+                        year = "Unknown"
+                    
+                    # Extract other attributes
+                    slug = react_component.get("data-item-slug", "")
+                    film_id = react_component.get("data-film-id", "")
+                    
+                    # Parse the postered identifier JSON to get lid
+                    postered_identifier = react_component.get("data-postered-identifier", "")
+                    lid = ""
+                    if postered_identifier:
+                        try:
+                            identifier_data = json.loads(postered_identifier)
+                            lid = identifier_data.get("lid", "")
+                        except:
+                            lid = ""
+                    
+                    # Create full Letterboxd URI
+                    letterboxd_uri = f"https://boxd.it/{lid}" if lid else ""
+                    
+                    movie_data = {
+                        "Name": title,
+                        "Year": year,
+                        "Slug": slug,
+                        "Film ID": film_id,
+                        "LID": lid,
+                        "Letterboxd URI": letterboxd_uri,
+                    }
+                    page_movies.append(movie_data)
+                    
+            except Exception as e:
+                if DEBUG:
+                    print(f"Error parsing movie on page {page}: {e}")
+                continue
+        
+        return page_movies
+        
+    except Exception as e:
+        if DEBUG:
+            print(f"Error fetching page {page}: {e}")
+        return []
 
-        login_page = session.get(LOGIN_URL, headers=headers)
-        soup = BeautifulSoup(login_page.text, "html.parser")
-        csrf_input = soup.find("input", {"name": "__csrf"})
-        csrf_token = csrf_input["value"] if csrf_input else None
+def get_total_pages(username):
+    """Get the total number of pages by checking data-num-entries on the first page"""
+    try:
+        first_page_url = WATCHLIST_URL.format(username, 1)
+        response = requests.get(first_page_url, headers=headers)
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch first page: {response.status_code}")
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Find the watchlist content div with data-num-entries
+        watchlist_content = soup.find("div", {"class": "js-watchlist-content"})
+        if not watchlist_content:
+            raise Exception("Could not find watchlist content div")
+        
+        total_entries = watchlist_content.get("data-num-entries")
+        if not total_entries:
+            raise Exception("Could not find data-num-entries attribute")
+        
+        total_entries = int(total_entries)
+        
+        # Count movies on this first page to determine entries per page
+        movies_on_page = len(soup.find_all("li", {"class": "griditem"}))
+        if movies_on_page == 0:
+            raise Exception("No movies found on first page")
+        
+        # Calculate total pages needed
+        total_pages = math.ceil(total_entries / movies_on_page)
+        
+        if DEBUG:
+            print(f"Found {total_entries} total entries, {movies_on_page} per page = {total_pages} pages")
+        return total_pages, total_entries
+        
+    except Exception as e:
+        if DEBUG:
+            print(f"Error determining total pages: {e}")
+        # Fallback to old method if this fails
+        return None, None
 
-        if not csrf_token:
-            raise Exception("CSRF token not found.")
+def fetch_watchlist(username, export_csv=False, max_workers=10):
+    if username not in watchlists:
+        # Smart approach: determine exact number of pages from first page
+        total_pages, total_entries = get_total_pages(username)
+        
+        if total_pages is None:
+            if DEBUG:
+                print("Falling back to sequential fetching...")
+            # Fallback to old sequential method if smart detection fails
+            return fetch_watchlist_sequential(username, export_csv)
+        
+        # Fetch all pages concurrently
+        all_movies = []
+        pages_to_fetch = list(range(1, total_pages + 1))
+        
+        if DEBUG:
+            print(f"Fetching {len(pages_to_fetch)} pages concurrently with {max_workers} workers...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Create a session for each thread to avoid conflicts
+            futures = []
+            for page in pages_to_fetch:
+                thread_session = requests.Session()
+                futures.append(executor.submit(fetch_page_movies, username, page, thread_session))
+            
+            # Collect results as they complete
+            for future in futures:
+                page_movies = future.result()
+                all_movies.extend(page_movies)
+        
+        # Create DataFrame from collected movie data
+        df = pd.DataFrame(all_movies)
+        watchlists[username] = df
+        if DEBUG:
+            print(f"Successfully fetched {len(all_movies)} movies from {len(pages_to_fetch)} pages (expected {total_entries})")
+        
+        if export_csv and not df.empty:
+            os.makedirs("watchlists", exist_ok=True)
+            df.to_csv(f"watchlists/{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_watchlist.csv", index=False)
 
-        login_payload = {
-            "username": username,
-            "password": password,
-            "__csrf": csrf_token,
-        }
-        headers["Referer"] = LOGIN_URL
-        login_response = session.post(LOGIN_FORM, data=login_payload, headers=headers)
-
-        if "Invalid username or password" in login_response.text:
-            raise Exception("Login failed: Invalid credentials.")
-
-        export_url = EXPORT_URL_TEMPLATE.format(username)
-        export_response = session.get(export_url)
-
-        if export_response.status_code != 200 or "text/csv" not in export_response.headers.get("Content-Type", ""):
-            raise Exception("Failed to fetch CSV. Are you logged in?")
-
-        df = pd.read_csv(io.StringIO(export_response.text))
+    else:
+        if DEBUG:
+            print("Loading watchlist from cache...")
+        df = watchlists[username]
     
     if df.empty:
         raise Exception("Watchlist is empty.")
 
-    if export_csv:
-        df.to_csv("watchlist.csv", index=False)
+    return df
 
-    return df.sample(num_samples)
+def fetch_watchlist_sequential(username, export_csv=False):
+    """Fallback sequential method"""
+    session = requests.Session()
+    all_movies = []
+    
+    for page in range(1, 100):
+        page_movies = fetch_page_movies(username, page, session)
+        if not page_movies:
+            break
+        all_movies.extend(page_movies)
+    
+    df = pd.DataFrame(all_movies)
+    if export_csv and not df.empty:
+        os.makedirs("watchlists", exist_ok=True)
+        df.to_csv(f"watchlists/{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_watchlist.csv", index=False)
+    
+    return df
 
 def get_poster_image(metadata, session=None):
     sess = session or requests.Session()
@@ -78,13 +217,12 @@ def get_metadata(uri, session=None):
     response = sess.get(uri, headers=headers)
     if response.status_code != 200:
         raise Exception("Could not load movie page")
-    # Save the HTML content to a file for debugging
-    # with open("movie_page.html", "w", encoding="utf-8") as f:
-    #     f.write(response.text)
 
     soup = BeautifulSoup(response.text, "html.parser")
     json_data = soup.find("script", {"type": "application/ld+json"})
     if not json_data:
+        if DEBUG:
+            print("Movie metadata not found in the page")
         raise Exception("Movie metadata not found in the page")
     
     json_str = json_data.string.replace("/* <![CDATA[ */", "").replace("/* ]]> */", "").strip()
@@ -92,13 +230,12 @@ def get_metadata(uri, session=None):
 
     return movie_data
 
-# GUI Setup
 def on_submit():
     username = username_entry.get().strip()
-    password = password_entry.get().strip()
     num_samples = int(samples_entry.get())
     try:
-        sample_df = fetch_random_movie(username, password, num_samples=num_samples)
+        full_watchlist = fetch_watchlist(username, export_csv=True)
+        sample_df = full_watchlist.sample(num_samples)
         sample_row = sample_df.iloc[0]
 
         # Display movie title and year
@@ -142,11 +279,6 @@ if __name__ == "__main__":
     username_entry = tk.Entry(root)
     username_entry.grid(row=0, column=1)
     username_entry.insert(0, default_username)
-
-    tk.Label(root, text="Password:").grid(row=1, column=0, sticky="e")
-    password_entry = tk.Entry(root, show="*")
-    password_entry.grid(row=1, column=1)
-    password_entry.insert(0, keyring.get_password("letterboxd", default_username))
 
     tk.Label(root, text="Number of movies:").grid(row=2, column=0, sticky="e")
     samples_entry = tk.Entry(root)
