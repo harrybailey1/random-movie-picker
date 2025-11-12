@@ -1,0 +1,5 @@
+keyring
+pandas
+requests
+beautifulsoup4
+Pillow

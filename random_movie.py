@@ -133,44 +133,45 @@ def on_submit():
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
-root = tk.Tk()
-root.title("Random Letterboxd Movie Picker")
-default_username = "harrybailey1"
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Random Letterboxd Movie Picker")
+    default_username = "harrybailey1"
 
-tk.Label(root, text="Username:").grid(row=0, column=0, sticky="e")
-username_entry = tk.Entry(root)
-username_entry.grid(row=0, column=1)
-username_entry.insert(0, default_username)
+    tk.Label(root, text="Username:").grid(row=0, column=0, sticky="e")
+    username_entry = tk.Entry(root)
+    username_entry.grid(row=0, column=1)
+    username_entry.insert(0, default_username)
 
-tk.Label(root, text="Password:").grid(row=1, column=0, sticky="e")
-password_entry = tk.Entry(root, show="*")
-password_entry.grid(row=1, column=1)
-password_entry.insert(0, keyring.get_password("letterboxd", default_username))
+    tk.Label(root, text="Password:").grid(row=1, column=0, sticky="e")
+    password_entry = tk.Entry(root, show="*")
+    password_entry.grid(row=1, column=1)
+    password_entry.insert(0, keyring.get_password("letterboxd", default_username))
 
-tk.Label(root, text="Number of movies:").grid(row=2, column=0, sticky="e")
-samples_entry = tk.Entry(root)
-samples_entry.insert(0, "1")
-samples_entry.grid(row=2, column=1)
+    tk.Label(root, text="Number of movies:").grid(row=2, column=0, sticky="e")
+    samples_entry = tk.Entry(root)
+    samples_entry.insert(0, "1")
+    samples_entry.grid(row=2, column=1)
 
-submit_btn = tk.Button(root, text="🎲 Pick Random Movie", command=on_submit)
-submit_btn.grid(row=3, column=0, columnspan=2, pady=10)
+    submit_btn = tk.Button(root, text="🎲 Pick Random Movie", command=on_submit)
+    submit_btn.grid(row=3, column=0, columnspan=2, pady=10)
 
-result_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
-result_label.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+    result_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
+    result_label.grid(row=4, column=0, columnspan=2, pady=(10, 0))
 
-director_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
-director_label.grid(row=5, column=0, columnspan=2, pady=(0, 10))
+    director_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
+    director_label.grid(row=5, column=0, columnspan=2, pady=(0, 10))
 
-genre_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
-genre_label.grid(row=6, column=0, columnspan=2, pady=(0, 10))
+    genre_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
+    genre_label.grid(row=6, column=0, columnspan=2, pady=(0, 10))
 
-rating_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
-rating_label.grid(row=7, column=0, columnspan=2, pady=(0, 10))
+    rating_label = tk.Label(root, text="", font=("Helvetica", 14), fg="darkgreen", justify="left")
+    rating_label.grid(row=7, column=0, columnspan=2, pady=(0, 10))
 
-poster_label = tk.Label(root)
-poster_label.grid(row=8, column=0, columnspan=2)
+    poster_label = tk.Label(root)
+    poster_label.grid(row=8, column=0, columnspan=2)
 
-link_label = tk.Label(root, text="", fg="blue", cursor="hand2")
-link_label.grid(row=9, column=0, columnspan=2)
+    link_label = tk.Label(root, text="", fg="blue", cursor="hand2")
+    link_label.grid(row=9, column=0, columnspan=2)
 
-root.mainloop()
+    root.mainloop()
