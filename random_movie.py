@@ -363,24 +363,47 @@ def stop_background_metadata_fetch():
     # Reset the thread reference
     background_fetch_thread = None
 
+def update_ui_status(message):
+    status_label.config(text=message)
+    root.update()
+
 # GUI Setup
 def on_submit():
     global current_background_watchlist_key
     
-    usernames_text = username_entry.get("1.0", "end-1c").strip().replace(",", "\n").split()
-    usernames = [u.strip() for u in usernames_text if u.strip()]
-    num_samples = 1  # Always pick just one movie
+    # Clear previous results and show loading status
+    result_label.config(text="")
+    director_label.config(text="")
+    genre_label.config(text="")
+    rating_label.config(text="")
+    poster_label.config(image="")
+    link_label.config(text="")
+    submit_btn.config(state='disabled')
+    update_ui_status("Loading watchlists...")
+    
     try:
+        usernames_text = username_entry.get("1.0", "end-1c").strip().replace(",", "\n").split()
+        usernames = [u.strip() for u in usernames_text if u.strip()]
+        num_samples = 1  # Always pick just one movie
+        
         # Create a key to identify this specific watchlist
         if len(usernames) == 1:
             watchlist_key = usernames[0]
+            update_ui_status(f"Fetching watchlist for {usernames[0]}...")
             full_watchlist = fetch_watchlist(usernames[0], export_csv=True)
         else:
             watchlist_key = tuple(sorted(usernames))
+            update_ui_status(f"Fetching watchlists for {len(usernames)} users...")
             full_watchlist = fetch_multiple_watchlists(usernames, export_csv=True)
         
         if full_watchlist.empty:
             raise Exception("No movies found in the intersection of all users' watchlists.")
+        
+        # Update status with movie count
+        if len(usernames) == 1:
+            update_ui_status(f"Found {len(full_watchlist)} movies in watchlist")
+        else:
+            update_ui_status(f"Found {len(full_watchlist)} movies common to all {len(usernames)} users")
         
         # Only start background metadata fetching if this is a different watchlist
         if current_background_watchlist_key != watchlist_key:
@@ -389,7 +412,7 @@ def on_submit():
         
         sample_df = full_watchlist.sample(num_samples)
         sample_row = sample_df.iloc[0]
-        sample_index = sample_df.index[0]  # Get the actual index from the sample
+        sample_index = sample_df.index[0]
 
         # Display movie title and year
         title = f"{sample_row['Name']} ({sample_row['Year']})"
@@ -401,29 +424,30 @@ def on_submit():
             meta = sample_row['Metadata']
         else:
             # Force fetch this specific movie's metadata immediately
+            update_ui_status("Fetching movie details...")
             meta = fetch_single_metadata(uri)
             # Store it back in the DataFrame for future use
             if 'Metadata' not in full_watchlist.columns:
                 full_watchlist['Metadata'] = None
             full_watchlist.at[sample_index, 'Metadata'] = meta
-        result_label.config(text=title)
+        
+        # Clear status and shrink status box
+        status_label.config(text="")
 
+        # Display title
+        result_label.config(text=title)
         # Create clickable link
         link_label.config(text="View on Letterboxd", fg=ACCENT_COLOR, cursor="pointinghand")
         link_label.bind("<Button-1>", lambda _: webbrowser.open_new(uri))
-
         # Display director
         director = meta.get("director", [{}])[0].get("name", "Unknown") if meta.get("director") else "Unknown"
         director_label.config(text=f"Director: {director}")
-
         # Display genre
         genre = meta.get("genre", ["Unknown"])[0] if meta.get("genre") else "Unknown"
         genre_label.config(text=f"Genre: {genre}")
-
         # Display rating
         rating = meta.get("aggregateRating", {}).get("ratingValue", "N/A") if meta.get("aggregateRating") else "N/A"
         rating_label.config(text=f"Rating: {rating}")
-
         # Load and show poster
         img = get_poster_image(meta)
         photo = ImageTk.PhotoImage(img)
@@ -431,8 +455,12 @@ def on_submit():
         poster_label.image = photo  # Save reference to avoid GC
         
     except Exception as e:
+        status_label.config(text="")
         print(f"Error: {e}")
         messagebox.showerror("Error", str(e))
+    finally:
+        # Always re-enable the button
+        submit_btn.config(state='normal')
 
 if __name__ == "__main__":
     # Letterboxd color scheme
@@ -445,7 +473,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title("Letterboxd Random Movie Picker")
     root.configure(bg=BG_COLOR)
-    root.geometry("420x770")
+    root.geometry("420x800")
     root.resizable(True, True)
     root.minsize(380, 600)
     
@@ -513,18 +541,25 @@ if __name__ == "__main__":
                           activeforeground='#000')
     submit_btn.grid(row=3, column=0, columnspan=2, pady=25, sticky="")
 
+    # Status/diagnostic label
+    status_label = tk.Label(root, text="No results to show", 
+                           font=(body_font[0], 11), 
+                           bg=BG_COLOR, fg=FG_COLOR,
+                           justify="center", wraplength=380)
+    status_label.grid(row=4, column=0, columnspan=2, pady=(0, 10), sticky="")
+
     # Movie info display
     result_label = tk.Label(root, text="", 
                            font=(header_font[0], 15, 'bold'), 
                            bg=BG_COLOR, fg=FG_COLOR, 
                            justify="center", wraplength=380)
-    result_label.grid(row=4, column=0, columnspan=2, pady=(0, 10), sticky="")
+    result_label.grid(row=5, column=0, columnspan=2, pady=(0, 10), sticky="")
 
     director_label = tk.Label(root, text="", 
                              font=body_font, 
                              bg=BG_COLOR, fg="#9ab",
                              justify="center")
-    director_label.grid(row=5, column=0, columnspan=2, pady=(0, 4), sticky="")
+    director_label.grid(row=6, column=0, columnspan=2, pady=(0, 4), sticky="")
 
     genre_label = tk.Label(root, text="", 
                           font=body_font, 
@@ -534,22 +569,22 @@ if __name__ == "__main__":
                           font=body_font, 
                           bg=BG_COLOR, fg="#9ab",
                           justify="center")
-    genre_label.grid(row=6, column=0, columnspan=2, pady=(0, 4), sticky="")
+    genre_label.grid(row=7, column=0, columnspan=2, pady=(0, 4), sticky="")
 
     rating_label = tk.Label(root, text="", 
                            font=body_font, 
                            bg=BG_COLOR, fg="#9ab",
                            justify="center")
-    rating_label.grid(row=7, column=0, columnspan=2, pady=(0, 12), sticky="")
+    rating_label.grid(row=8, column=0, columnspan=2, pady=(0, 12), sticky="")
 
     # Poster
     poster_label = tk.Label(root, bg=BG_COLOR)
-    poster_label.grid(row=8, column=0, columnspan=2, pady=(0, 12), sticky="")
+    poster_label.grid(row=9, column=0, columnspan=2, pady=(0, 12), sticky="")
 
     # Link
     link_label = tk.Label(root, text="", 
                          fg=ACCENT_COLOR, cursor="pointinghand",
                          bg=BG_COLOR, font=(body_font[0], 11, 'underline'))
-    link_label.grid(row=9, column=0, columnspan=2, pady=(0, 15), sticky="")
+    link_label.grid(row=10, column=0, columnspan=2, pady=(0, 15), sticky="")
 
     root.mainloop()
