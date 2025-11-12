@@ -5,13 +5,13 @@ A Python GUI application that picks random movies from your Letterboxd watchlist
 ## Features
 
 - 🎲 Pick random movies from single or multiple Letterboxd watchlists
-- 👥 **Multi-user support**: Find movies that are in everyone's watchlist
-- 🌙 **Dark Letterboxd theme**: Beautiful charcoal design matching Letterboxd's aesthetic
 - 🖼️ Display movie posters
 - 📋 Show movie details (director, genre, rating)
 - 🔗 Direct link to Letterboxd movie page
 - 💾 Cache watchlists locally for faster subsequent runs
-- ⚡ **Fast multithreaded fetching**: Concurrent page processing for quick loading
+- 👥 Multi-user support: Find movies that are in everyone's watchlist
+- 🌙 Dark Letterboxd theme: Beautiful charcoal design matching Letterboxd's aesthetic
+- ⚡ Fast multithreaded fetching: Concurrent page processing for quick loading
 
 ## Requirements
 
@@ -103,7 +103,7 @@ The app will display:
 - Clickable link to Letterboxd
 
 ## Future Improvements
-- [ ] Add filtering options (genre, year, rating)
-- [ ] Allow fetched metadata to be transferred across watchlists for the same movie
-- [ ] Improve error handling and user feedback
-- [ ] Add support for picking more than one movie at a time
+- Add filtering options (genre, year, rating)
+- Allow fetched metadata to be transferred across watchlists for the same movie
+- Improve error handling and user feedback
+- Add support for picking more than one movie at a time
