@@ -8,3 +8,5 @@ build/
 *.html
 *.spec
 *.csv
+*.command
+*.spec
