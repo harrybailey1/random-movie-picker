@@ -13,7 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Constants
 WATCHLIST_URL = "https://letterboxd.com/{}/watchlist/page/{}/"
-DEBUG = True
+DEBUG = False 
+SAVE_WATCHLISTS = False # Needs to be false for app packaging
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -390,11 +391,11 @@ def on_submit():
         if len(usernames) == 1:
             watchlist_key = usernames[0]
             update_ui_status(f"Fetching watchlist for {usernames[0]}...")
-            full_watchlist = fetch_watchlist(usernames[0], export_csv=True)
+            full_watchlist = fetch_watchlist(usernames[0], export_csv=SAVE_WATCHLISTS)
         else:
             watchlist_key = tuple(sorted(usernames))
             update_ui_status(f"Fetching watchlists for {len(usernames)} users...")
-            full_watchlist = fetch_multiple_watchlists(usernames, export_csv=True)
+            full_watchlist = fetch_multiple_watchlists(usernames, export_csv=SAVE_WATCHLISTS)
         
         if full_watchlist.empty:
             raise Exception("No movies found in the intersection of all users' watchlists.")

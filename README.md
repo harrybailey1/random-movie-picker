@@ -51,8 +51,10 @@ python random_movie.py
 You can compile the script into a standalone executable using PyInstaller. Run the following command in the terminal:
 
 ```bash
-pyinstaller --onefile --windowed --name "MoviePicker" --icon="icon.icns" random_movie.py
+pyinstaller --windowed --name "MoviePicker" --icon=icon.icns random_movie.py
 ```
+
+If build fails unexpectedly, try creating a fresh conda/virtual environments and installing dependencies with newest version of Python.
 
 After compilation, file structure will be:
 ```
@@ -107,3 +109,4 @@ The app will display:
 - Allow fetched metadata to be transferred across watchlists for the same movie
 - Improve error handling and user feedback
 - Add support for picking more than one movie at a time
+- Port to mobile platforms (using BeeWare or Kivy, e.g.)
